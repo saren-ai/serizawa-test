@@ -6,6 +6,7 @@ import {
   JetBrains_Mono,
 } from "next/font/google";
 import "./globals.css";
+import { FloatingPillBar } from "@/components/nav/FloatingPillBar";
 
 const bebasNeue = Bebas_Neue({
   weight: "400",
@@ -66,8 +67,17 @@ export default function RootLayout({
       lang="en"
       className={`${bebasNeue.variable} ${dmSans.variable} ${notoSansJP.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="bg-ink-950 text-washi-100 font-body antialiased">
+      <body
+        className="antialiased"
+        style={{
+          backgroundColor: "var(--color-ink-950)",
+          color: "var(--color-washi-100)",
+          fontFamily: "var(--font-body)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
         {children}
+        <FloatingPillBar />
       </body>
     </html>
   );
