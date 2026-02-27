@@ -9,20 +9,22 @@ import { persistAnalysis } from "@/lib/analysis/persist";
 import { createClient } from "@/lib/supabase/server";
 import type { MediaType } from "@/lib/supabase/types";
 
-// Anthropic is long-running — cannot use edge runtime
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
   timeout: 25_000,
-  maxRetries: 0, // We handle retries ourselves in the route loop — SDK retries compound to 3× timeout
+  maxRetries: 0,
 });
 
 // 🐢→🐇 TEMP: using Haiku during UX dev (3–8s vs Sonnet's 20–25s).
 // Switch back to "claude-sonnet-4-20250514" before bulk-caching common characters.
 const MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS = 8192;
+
+let cachedTemplate: { id: string; system_prompt: string; user_message_template: string; fetchedAt: number } | null = null;
+const TEMPLATE_TTL_MS = 300_000; // 5 min in-memory cache
 
 interface AnalyzeBody {
   characterName: string;
@@ -33,21 +35,6 @@ interface AnalyzeBody {
   additionalContext?: string | null;
 }
 
-/**
- * POST /api/characters/[key]/analyze
- *
- * Full analysis flow per serizawa-prompt-template-v1.md §3:
- * 1. Cache check (no rate limit hit on cache)
- * 2. Rate limit (3/min anon, 10/min logged-in)
- * 3. Fetch active prompt_template from DB
- * 4. Build user message from template
- * 5. Call Claude (retry once on parse failure)
- * 6. Validate schema
- * 7. Recompute scores server-side (NEVER trust model math)
- * 8. Persist to Supabase
- * 9. Cache result
- * 10. Return
- */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ key: string }> }
@@ -73,69 +60,34 @@ export async function POST(
 
   const characterKey = normalizeCharacterKey(characterName, mediaTitle);
 
-  // --- 1. Cache check (Redis → Supabase) ---
-  const cached = await getCachedAnalysis(characterKey);
+  // --- Phase 1: Parallel cache + DB + auth checks ---
+  const supabase = await createClient();
+  const [cached, existing, { data: { user } }] = await Promise.all([
+    getCachedAnalysis(characterKey),
+    lookupExistingAnalysis(supabase, characterKey),
+    supabase.auth.getUser(),
+  ]);
+
   if (cached) {
     return NextResponse.json({ ...cached, fromCache: true });
   }
-
-  // Check Supabase for an existing analysis (survives Redis TTL expiry)
-  const supabase = await createClient();
-  const existing = await lookupExistingAnalysis(supabase, characterKey);
   if (existing) {
-    await setCachedAnalysis(characterKey, existing);
+    setCachedAnalysis(characterKey, existing).catch(() => {});
     return NextResponse.json({ ...existing, fromCache: true });
   }
 
-  // --- 2. Rate limiting ---
-  const { data: { user } } = await supabase.auth.getUser();
-  const isAdmin = !!(user && await isUserAdmin(supabase));
-
-  // Skip rate limiting in local development
+  // --- Phase 2: Rate limit + prompt template (parallel) ---
   const isDev = process.env.NODE_ENV === "development";
+  const isAdmin = !!(user && await isUserAdminFast(supabase, user.id));
 
-  if (!isAdmin && !isDev) {
-    const identifier = user?.id ?? getAnonymousIdentifier(request);
-    const limiter = user ? userLimiter : anonymousLimiter;
+  const [rateLimitErr, template] = await Promise.all([
+    (!isAdmin && !isDev)
+      ? checkRateLimit(user?.id ?? getAnonymousIdentifier(request), !!user)
+      : Promise.resolve(null),
+    getPromptTemplate(supabase),
+  ]);
 
-    // Fail-open: if Redis is unreachable, allow the request through
-    let rateLimitResult: { success: boolean; limit: number; remaining: number; reset: number };
-    try {
-      rateLimitResult = await limiter.limit(identifier);
-    } catch {
-      rateLimitResult = { success: true, limit: 0, remaining: 0, reset: 0 };
-    }
-
-    if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { error: "Rate limit exceeded. Please wait before running another analysis." },
-        {
-          status: 429,
-          headers: {
-            "X-RateLimit-Limit": String(rateLimitResult.limit),
-            "X-RateLimit-Remaining": String(rateLimitResult.remaining),
-            "X-RateLimit-Reset": String(rateLimitResult.reset),
-            "Retry-After": String(Math.ceil((rateLimitResult.reset - Date.now()) / 1000)),
-          },
-        }
-      );
-    }
-  }
-
-  // --- 3. Fetch active prompt template ---
-  const { data: template } = await (supabase as unknown as {
-    from: (t: string) => {
-      select: (q: string) => {
-        eq: (c: string, v: boolean) => {
-          single: () => Promise<{ data: { id: string; system_prompt: string; user_message_template: string } | null }>;
-        };
-      };
-    };
-  })
-    .from("prompt_templates")
-    .select("id, system_prompt, user_message_template")
-    .eq("is_active", true)
-    .single();
+  if (rateLimitErr) return rateLimitErr;
 
   if (!template) {
     return NextResponse.json(
@@ -243,35 +195,30 @@ export async function POST(
 
   const processingDurationMs = Date.now() - startTime;
 
-  // --- 8. Persist to Supabase ---
-  let persistResult;
-  try {
-    persistResult = await persistAnalysis({
-      characterName,
-      mediaTitle,
-      mediaType,
-      era: era ?? null,
-      genderFlag: genderFlag ?? null,
-      parsed: parsed!,
-      scoring,
-      promptTemplateVersion: template.id,
-      modelVersion: MODEL,
-      processingDurationMs,
-      rawPrompt: userMessage,
-      rawResponse,
-    });
-  } catch (err) {
-    console.error("[analyze] Persist failed:", err);
-    // Return the analysis even if persist fails — user gets their result
-    const result = buildResult(parsed!, scoring, characterKey, false);
-    return NextResponse.json({ ...result, fromCache: false, persistError: true });
-  }
+  // --- 8. Build result immediately, persist + cache in background ---
+  const result = buildResult(parsed!, scoring, characterKey, false);
 
-  // --- 9. Cache result ---
-  const result = buildResult(parsed!, scoring, persistResult.characterKey, false);
-  await setCachedAnalysis(characterKey, result);
+  // Fire persist + cache in parallel — don't block the response
+  const persistPromise = persistAnalysis({
+    characterName,
+    mediaTitle,
+    mediaType,
+    era: era ?? null,
+    genderFlag: genderFlag ?? null,
+    parsed: parsed!,
+    scoring,
+    promptTemplateVersion: template.id,
+    modelVersion: MODEL,
+    processingDurationMs,
+    rawPrompt: userMessage,
+    rawResponse,
+  }).catch((err) => console.error("[analyze] Persist failed:", err));
 
-  // --- 10. Return ---
+  const cachePromise = setCachedAnalysis(characterKey, result).catch(() => {});
+
+  // Wait for both but don't let failures block the response
+  await Promise.allSettled([persistPromise, cachePromise]);
+
   return NextResponse.json({ ...result, fromCache: false });
 }
 
@@ -300,18 +247,15 @@ function buildUserMessage(
 }
 
 function getAnonymousIdentifier(request: NextRequest): string {
-  // Use a combination of forwarded IP headers — no IP storage per PRD §17
   const forwarded = request.headers.get("x-forwarded-for");
   const ip = forwarded?.split(",")[0]?.trim() ?? "anonymous";
   return `anon:${ip}`;
 }
 
-async function isUserAdmin(
-  supabase: Awaited<ReturnType<typeof createClient>>
+async function isUserAdminFast(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
 ): Promise<boolean> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
-
   const { data } = await (supabase as unknown as {
     from: (t: string) => {
       select: (q: string) => {
@@ -323,10 +267,64 @@ async function isUserAdmin(
   })
     .from("users")
     .select("is_admin")
-    .eq("id", user.id)
+    .eq("id", userId)
     .single();
 
   return data?.is_admin ?? false;
+}
+
+async function checkRateLimit(
+  identifier: string,
+  isLoggedIn: boolean
+): Promise<NextResponse | null> {
+  const limiter = isLoggedIn ? userLimiter : anonymousLimiter;
+  let result: { success: boolean; limit: number; remaining: number; reset: number };
+  try {
+    result = await limiter.limit(identifier);
+  } catch {
+    return null; // fail-open
+  }
+  if (!result.success) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Please wait before running another analysis." },
+      {
+        status: 429,
+        headers: {
+          "X-RateLimit-Limit": String(result.limit),
+          "X-RateLimit-Remaining": String(result.remaining),
+          "X-RateLimit-Reset": String(result.reset),
+          "Retry-After": String(Math.ceil((result.reset - Date.now()) / 1000)),
+        },
+      }
+    );
+  }
+  return null;
+}
+
+async function getPromptTemplate(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<{ id: string; system_prompt: string; user_message_template: string } | null> {
+  if (cachedTemplate && Date.now() - cachedTemplate.fetchedAt < TEMPLATE_TTL_MS) {
+    return cachedTemplate;
+  }
+  const { data } = await (supabase as unknown as {
+    from: (t: string) => {
+      select: (q: string) => {
+        eq: (c: string, v: boolean) => {
+          single: () => Promise<{ data: { id: string; system_prompt: string; user_message_template: string } | null }>;
+        };
+      };
+    };
+  })
+    .from("prompt_templates")
+    .select("id, system_prompt, user_message_template")
+    .eq("is_active", true)
+    .single();
+
+  if (data) {
+    cachedTemplate = { ...data, fetchedAt: Date.now() };
+  }
+  return data;
 }
 
 function buildResult(

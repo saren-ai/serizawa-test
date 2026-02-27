@@ -206,8 +206,8 @@ export async function persistAnalysis(input: AnalysisInput): Promise<PersistResu
   if (analysisError) console.error("[persist] Analysis insert error:", analysisError.code, analysisError.message);
   if (!analysis?.id) throw new Error(`Failed to insert analysis: ${analysisError?.message ?? "unknown"}`);
 
-  // 4. Store raw prompt + response in analysis_raw (secured, admin only)
-  await (supabase as unknown as {
+  // 4–6: Run raw insert, character update, and HOF check in parallel
+  const rawInsertPromise = (supabase as unknown as {
     from: (t: string) => { insert: (v: Record<string, unknown>) => Promise<unknown> };
   })
     .from("analysis_raw")
@@ -217,8 +217,7 @@ export async function persistAnalysis(input: AnalysisInput): Promise<PersistResu
       raw_response: input.rawResponse,
     });
 
-  // 5. Update character with latest analysis
-  await (supabase as unknown as {
+  const characterUpdatePromise = (supabase as unknown as {
     from: (t: string) => {
       update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> };
     };
@@ -234,28 +233,31 @@ export async function persistAnalysis(input: AnalysisInput): Promise<PersistResu
     })
     .eq("id", character.id);
 
-  // 6. Check HOF eligibility (requires counting all analyses for this character)
-  const { count } = await (supabase as unknown as {
-    from: (t: string) => {
-      select: (q: string, opts: Record<string, unknown>) => {
-        eq: (c: string, v: string) => Promise<{ count: number | null }>;
-      };
-    };
-  })
-    .from("analyses")
-    .select("id", { count: "exact" })
-    .eq("character_id", character.id);
-
-  if (count && isHallOfFameEligible(scoring.finalScore, count)) {
-    await (supabase as unknown as {
+  const hofCheckPromise = (async () => {
+    const { count } = await (supabase as unknown as {
       from: (t: string) => {
-        update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> };
+        select: (q: string, opts: Record<string, unknown>) => {
+          eq: (c: string, v: string) => Promise<{ count: number | null }>;
+        };
       };
     })
-      .from("characters")
-      .update({ hall_of_fame: true })
-      .eq("id", character.id);
-  }
+      .from("analyses")
+      .select("id", { count: "exact" })
+      .eq("character_id", character.id);
+
+    if (count && isHallOfFameEligible(scoring.finalScore, count)) {
+      await (supabase as unknown as {
+        from: (t: string) => {
+          update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> };
+        };
+      })
+        .from("characters")
+        .update({ hall_of_fame: true })
+        .eq("id", character.id);
+    }
+  })();
+
+  await Promise.all([rawInsertPromise, characterUpdatePromise, hofCheckPromise]);
 
   return { analysisId: analysis.id, characterId: character.id, characterKey };
 }
