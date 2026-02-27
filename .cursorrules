@@ -1,37 +1,39 @@
 # Serizawa Test — Cursor Project Rules
 
-## Project context
-This is the Serizawa Test web application. Full PRD is in
-serizawa-test-prd-v03.md. Prompt template is in
-serizawa-prompt-template-v1.md. Read both before generating
-any code.
+## Read first
+Before writing any code, read all four documents in /docs/:
+- serizawa-test-prd-v03.md       (full product spec)
+- serizawa-prompt-template-v1.md (AI scoring engine)
+- style-guide.md                 (design system)
+- ux-flow.md                     (navigation + view specs)
 
 ## Stack
-- Next.js 14 (App Router)
-- TypeScript
-- Tailwind CSS + Headless UI
-- Supabase (Postgres + Auth + Storage)
-- Anthropic Claude API (claude-sonnet-4-20250514)
-- Upstash Redis (analysis cache)
-- Vercel deployment
+Next.js 14 (App Router), TypeScript, Tailwind CSS,
+Supabase (Postgres + Auth + Storage), Anthropic Claude API
+(claude-sonnet-4-20250514), Upstash Redis, Vercel
 
 ## Code conventions
-- All scores are DECIMAL(4,2) — never integers
-- Server-side score recomputation is mandatory — never trust
-  model arithmetic (see computeScores() in prompt template)
-- Q5 is a flag only — never include it in FinalScore calculation
-- Character keys use normalizeCharacterKey() — see PRD §14
-- All trope IDs reference the taxonomy in PRD §8.4
-- Prompt template version must be logged on every analysis
+- All scores: DECIMAL(4,2) — never integers
+- Server-side score recomputation mandatory — never trust model math
+- Q5 is a flag only — never in FinalScore calculation
+- Character keys via normalizeCharacterKey() — see PRD §14
+- All trope IDs reference taxonomy in PRD §8.4
+- Prompt template version logged on every analysis record
 
 ## Architecture rules
-- Analysis scoring logic lives in /lib/scoring.ts only
-- Prompt template lives in Supabase prompt_templates table,
-  not hardcoded in API routes
+- Scoring logic lives in /lib/scoring.ts only
+- Prompt template lives in Supabase prompt_templates table
 - Community scores never overwrite AI FinalScore
 - Rate limiting: 3 analyses/min anonymous, 10 logged-in
 
-## Tone
-The app voice is: academically rigorous, pop-culturally witty,
-transparently non-institutional. See PRD §2 for full voice guide.
-Register tags (🚨 📚 😂) appear on trope detections throughout the UI.
+## Navigation rules
+- No vertical nav columns. Ever.
+- Floating pill bar only — four destinations maximum
+- See ux-flow.md §2 for full spec
+
+## Design rules
+- Dark mode native — no light mode in v1
+- Rounded everything — minimum --radius-sm (8px)
+- Pill buttons, circle icon buttons, no sharp corners
+- Bilingual type moments — see style-guide.md §3.3
+- Framer Motion for all animations — see style-guide.md §10

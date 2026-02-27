@@ -1,0 +1,52 @@
+name: Generate GitHub Wiki
+
+on:
+  schedule:
+    # Nightly at 03:00 UTC
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  generate-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+        working-directory: .
+
+      - name: Generate wiki pages
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/generate-wiki.mjs
+
+      - name: Checkout wiki
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy generated pages
+        run: |
+          cp wiki-output/Trope-Taxonomy.md wiki/Trope-Taxonomy.md
+          cp wiki-output/Model-Version-Log.md wiki/Model-Version-Log.md
+          cp wiki-output/Grade-Distribution.md wiki/Grade-Distribution.md
+          cp wiki-output/Hall-of-Fame.md wiki/Hall-of-Fame.md
+          cp wiki-output/Wall-of-Shame.md wiki/Wall-of-Shame.md
+
+      - name: Commit & push wiki
+        working-directory: wiki
+        run: |
+          git config user.name "serizawa-bot"
+          git config user.email "bot@serizawatest.com"
+          git add .
+          git diff --staged --quiet || git commit -m "chore: nightly wiki update $(date -u +%Y-%m-%d)"
+          git push
