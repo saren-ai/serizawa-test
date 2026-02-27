@@ -3,19 +3,22 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import Image from "next/image";
 import { normalizeCharacterKey } from "@/lib/characters";
 
 // ---------------------------------------------------------------------------
-// Preset characters — 6 showcase entries from the style guide
+// Preset characters — 8 showcase entries for the home page
 // ---------------------------------------------------------------------------
 
 const PRESETS = [
-  { name: "Mako Mori", media: "Pacific Rim" },
-  { name: "Dr. Ishirō Serizawa", media: "Godzilla (2014)" },
-  { name: "Mr. Miyagi", media: "The Karate Kid (1984)" },
-  { name: "Hikaru Sulu", media: "Star Trek (TOS)" },
-  { name: "Trini Kwan", media: "Power Rangers (1993)" },
-  { name: "Yukio", media: "The Wolverine (2013)" },
+  { name: "Mako Mori", media: "Pacific Rim", img: "/characters/mako_mori__pacific_rim.png" },
+  { name: "Dr. Ishirō Serizawa", media: "Godzilla (2014)", img: "/characters/dr_serizawa__godzilla.png" },
+  { name: "Mr. Miyagi", media: "The Karate Kid (1984)", img: "/characters/mr_miyagi__karate_kid.png" },
+  { name: "Hikaru Sulu", media: "Star Trek (TOS)", img: "/characters/hikaru_sulu__star_trek.png" },
+  { name: "Yukio", media: "The Wolverine (2013)", img: "/characters/yukio_the_wolverine.png" },
+  { name: "Akira", media: "John Wick: Chapter 4", img: "/characters/akira_john_wick_4.png" },
+  { name: "O-Ren Ishii", media: "Kill Bill: Vol. 1" },
+  { name: "Hiro Nakamura", media: "Heroes" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -87,25 +90,45 @@ export default function HomePage() {
       {/* Hero section — full viewport */}
       <div className="flex flex-1 items-center justify-center px-4 py-16">
         <motion.div
-          className="w-full max-w-[480px]"
+          className="w-full max-w-[540px]"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
-          {/* Wordmark */}
+          {/* Wordmark with Dr. Serizawa portrait */}
           <motion.div variants={itemVariants} className="mb-8 text-center">
-            <h1
-              className="text-[56px] leading-none tracking-wide"
-              style={{ fontFamily: "var(--font-display)", color: "var(--color-washi-100)" }}
-            >
-              SERIZAWA
-            </h1>
-            <p
-              className="text-base mt-1"
-              style={{ fontFamily: "var(--font-jp)", color: "var(--color-washi-400)" }}
-            >
-              芹沢テスト
-            </p>
+            <div className="flex items-center justify-center gap-4 mb-2">
+              <div
+                className="relative w-[60px] h-[60px] rounded-full overflow-hidden shrink-0"
+                style={{
+                  border: "2px solid var(--color-vermillion-500)",
+                  boxShadow: "0 0 20px rgba(207,45,37,0.25)",
+                }}
+              >
+                <Image
+                  src="/characters/dr_serizawa__godzilla.png"
+                  alt="Dr. Ishirō Serizawa"
+                  fill
+                  className="object-cover"
+                  sizes="60px"
+                  priority
+                />
+              </div>
+              <div>
+                <h1
+                  className="text-[42px] leading-none tracking-wide"
+                  style={{ fontFamily: "var(--font-display)", color: "var(--color-washi-100)" }}
+                >
+                  THE SERIZAWA TEST
+                </h1>
+                <p
+                  className="text-sm mt-0.5"
+                  style={{ fontFamily: "var(--font-jp)", color: "var(--color-washi-400)" }}
+                >
+                  芹沢テスト
+                </p>
+              </div>
+            </div>
             <p className="text-sm mt-3" style={{ color: "var(--color-washi-400)" }}>
               Japanese character representation in Western media.{" "}
               <span style={{ color: "var(--color-washi-300)" }}>Scored honestly.</span>
@@ -216,16 +239,29 @@ export default function HomePage() {
             </button>
           </motion.form>
 
-          {/* Preset pills */}
-          <motion.div variants={itemVariants} className="mt-6">
+          {/* Preset characters — prominent showcase */}
+          <motion.div
+            variants={itemVariants}
+            className="mt-8 rounded-2xl px-5 py-5"
+            style={{
+              backgroundColor: "rgba(250,246,241,0.03)",
+              border: "1px solid var(--color-ink-700)",
+            }}
+          >
             <p
-              className="text-xs mb-3 text-center"
-              style={{ color: "var(--color-washi-400)", fontFamily: "var(--font-mono)" }}
+              className="text-xs mb-4 text-center tracking-wide uppercase"
+              style={{ color: "var(--color-washi-300)", fontFamily: "var(--font-mono)" }}
             >
-              Try a known character
+              Or pick a character
+              <span
+                className="ml-2 normal-case tracking-normal"
+                style={{ fontFamily: "var(--font-jp)", color: "var(--color-washi-400)", opacity: 0.6 }}
+              >
+                キャラクターを選ぶ
+              </span>
             </p>
             <motion.div
-              className="flex flex-wrap gap-2 justify-center"
+              className="flex flex-wrap gap-2.5 justify-center"
               variants={containerVariants}
               initial="hidden"
               animate="visible"
@@ -236,17 +272,43 @@ export default function HomePage() {
                   variants={presetVariants}
                   onClick={() => handlePreset(preset.name, preset.media)}
                   disabled={isLoading}
-                  className="px-3 py-1.5 text-xs rounded-full border transition-all disabled:opacity-40"
+                  className="flex items-center gap-2 px-3.5 py-2 text-sm rounded-full border transition-all disabled:opacity-40"
                   style={{
                     backgroundColor: "var(--color-ink-800)",
                     borderColor: "var(--color-ink-600)",
-                    color: "var(--color-washi-300)",
+                    color: "var(--color-washi-200)",
                     fontFamily: "var(--font-body)",
                     borderRadius: "9999px",
                   }}
-                  whileHover={{ scale: 1.04, borderColor: "var(--color-vermillion-500)" }}
+                  whileHover={{
+                    scale: 1.04,
+                    borderColor: "var(--color-vermillion-500)",
+                    backgroundColor: "rgba(207,45,37,0.08)",
+                  }}
                   whileTap={{ scale: 0.97 }}
                 >
+                  {preset.img ? (
+                    <span className="relative w-6 h-6 rounded-full overflow-hidden shrink-0">
+                      <Image
+                        src={preset.img}
+                        alt={preset.name}
+                        fill
+                        className="object-cover"
+                        sizes="24px"
+                      />
+                    </span>
+                  ) : (
+                    <span
+                      className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-[10px]"
+                      style={{
+                        backgroundColor: "var(--color-ink-700)",
+                        color: "var(--color-washi-400)",
+                        fontFamily: "var(--font-jp)",
+                      }}
+                    >
+                      人
+                    </span>
+                  )}
                   {preset.name}
                 </motion.button>
               ))}
