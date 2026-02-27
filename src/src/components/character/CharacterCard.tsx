@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Grade, Q5Flag } from "@/lib/supabase/types";
 import { displayScore } from "@/lib/display";
+import { getCharacterImageUrl } from "@/lib/character-images";
 
 interface CharacterCardProps {
   characterKey: string;
@@ -50,6 +51,7 @@ export function CharacterCard({
       : "var(--color-ink-600)";
 
   const gradeColor = GRADE_TEXT[grade] ?? "#B8A99A";
+  const resolvedImage = getCharacterImageUrl(characterKey, imageUrl);
 
   return (
     <Link
@@ -73,10 +75,10 @@ export function CharacterCard({
           backgroundColor: "var(--color-ink-700)",
         }}
       >
-        {imageUrl ? (
+        {resolvedImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={imageUrl}
+            src={resolvedImage}
             alt={name}
             className="w-full h-full object-cover"
           />

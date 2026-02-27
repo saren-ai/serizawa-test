@@ -70,9 +70,11 @@ export default function RootLayout({
       <body
         className="antialiased"
         style={{
-          backgroundColor: "var(--color-ink-950)",
-          color: "var(--color-washi-100)",
-          fontFamily: "var(--font-body)",
+          // Use CSS variables when Tailwind theme is active, but fall back to
+          // hard-coded dark palette so we never render a light theme.
+          backgroundColor: "var(--color-ink-950, #0A0705)",
+          color: "var(--color-washi-100, #FAF6F1)",
+          fontFamily: "var(--font-body, 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif)",
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >

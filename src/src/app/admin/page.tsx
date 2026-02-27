@@ -44,7 +44,7 @@ export default async function AdminPage() {
     queue.critics.filter((c) => c.status === "pending").length;
 
   return (
-    <main className="min-h-screen px-4 py-10" style={{ backgroundColor: "var(--color-ink-950)" }}>
+    <main className="min-h-screen px-4 py-10" style={{ backgroundColor: "var(--color-ink-950, #0A0705)" }}>
       <div className="max-w-[900px] mx-auto">
         <div className="mb-8 flex items-center justify-between">
           <div>

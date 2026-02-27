@@ -78,7 +78,7 @@ export default function GlossaryPage() {
   }, {} as Record<string, GlossaryEntry[]>);
 
   return (
-    <main className="min-h-screen px-4 py-10" style={{ backgroundColor: "var(--color-ink-950)" }}>
+    <main className="min-h-screen px-4 py-10" style={{ backgroundColor: "var(--color-ink-950, #0A0705)" }}>
       <div className="max-w-[720px] mx-auto">
         {/* Header */}
         <div className="mb-8">

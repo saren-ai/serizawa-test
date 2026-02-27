@@ -86,7 +86,10 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col" style={{ backgroundColor: "var(--color-ink-950)" }}>
+    <main
+      className="min-h-screen flex flex-col"
+      style={{ backgroundColor: "var(--color-ink-950, #0A0705)" }}
+    >
       {/* Hero section — full viewport */}
       <div className="flex flex-1 items-center justify-center px-4 py-16">
         <motion.div

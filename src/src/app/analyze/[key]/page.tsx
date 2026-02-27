@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -56,6 +56,14 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 30; // 60s max
 
 export default function AnalyzeLoadingPage() {
+  return (
+    <Suspense>
+      <AnalyzeContent />
+    </Suspense>
+  );
+}
+
+function AnalyzeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const characterName = searchParams.get("name") ?? "";
@@ -137,7 +145,7 @@ export default function AnalyzeLoadingPage() {
     return (
       <main
         className="min-h-screen flex items-center justify-center px-4"
-        style={{ backgroundColor: "var(--color-ink-950)" }}
+        style={{ backgroundColor: "var(--color-ink-950, #0A0705)" }}
       >
         <div className="text-center max-w-md">
           <p className="text-base mb-6" style={{ color: "var(--color-washi-400)" }}>
@@ -180,7 +188,7 @@ export default function AnalyzeLoadingPage() {
   return (
     <main
       className="min-h-screen flex items-center justify-center px-4"
-      style={{ backgroundColor: "var(--color-ink-950)" }}
+      style={{ backgroundColor: "var(--color-ink-950, #0A0705)" }}
       aria-live="polite"
       aria-label="Analyzing character — please wait"
     >

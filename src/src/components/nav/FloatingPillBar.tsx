@@ -21,11 +21,17 @@ export function FloatingPillBar() {
   const [hoveredHref, setHoveredHref] = useState<string | null>(null);
 
   useEffect(() => {
+    const isHome = window.location.pathname === "/";
+    if (!isHome) {
+      setVisible(true);
+      return;
+    }
     const onScroll = () => setVisible(window.scrollY > SCROLL_THRESHOLD);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [pathname]);
+
 
   const getIsActive = (href: string, matchExact: boolean) => {
     if (href === "/#search") return pathname === "/";

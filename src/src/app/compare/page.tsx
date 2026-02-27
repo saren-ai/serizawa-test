@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { displayScore, displayQScore } from "@/lib/display";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -36,6 +36,14 @@ const RULES = [
 ];
 
 export default function ComparePage() {
+  return (
+    <Suspense>
+      <CompareContent />
+    </Suspense>
+  );
+}
+
+function CompareContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const keysParam = searchParams.get("keys") ?? "";
@@ -126,7 +134,7 @@ export default function ComparePage() {
   const hasAny = characters.some(Boolean);
 
   return (
-    <main className="min-h-screen px-4 py-10" style={{ backgroundColor: "var(--color-ink-950)" }}>
+    <main className="min-h-screen px-4 py-10" style={{ backgroundColor: "var(--color-ink-950, #0A0705)" }}>
       <div className="max-w-[1080px] mx-auto">
         {/* Header */}
         <div className="mb-8">

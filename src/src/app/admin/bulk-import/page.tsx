@@ -29,7 +29,7 @@ export default function BulkImportPage() {
     return lines.slice(start).map((line) => {
       const [characterName = "", mediaTitle = "", releaseYearStr = "", mediaType = ""] = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
       const releaseYear = releaseYearStr ? parseInt(releaseYearStr) : undefined;
-      return { characterName, mediaTitle, releaseYear: releaseYear && !isNaN(releaseYear) ? releaseYear : undefined, mediaType: mediaType || undefined, status: "pending" };
+      return { characterName, mediaTitle, releaseYear: releaseYear && !isNaN(releaseYear) ? releaseYear : undefined, mediaType: mediaType || undefined, status: "pending" as const };
     }).filter((i) => i.characterName && i.mediaTitle);
   };
 
@@ -94,7 +94,7 @@ export default function BulkImportPage() {
   const processingCount = items.filter((i) => i.status === "processing").length;
 
   return (
-    <main className="min-h-screen px-4 py-10" style={{ backgroundColor: "var(--color-ink-950)" }}>
+    <main className="min-h-screen px-4 py-10" style={{ backgroundColor: "var(--color-ink-950, #0A0705)" }}>
       <div className="max-w-[800px] mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-1">

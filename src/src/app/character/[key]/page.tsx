@@ -185,7 +185,7 @@ export default async function CharacterPage({
   return (
     <main
       className="min-h-screen"
-      style={{ backgroundColor: "var(--color-ink-950)" }}
+      style={{ backgroundColor: "var(--color-ink-950, #0A0705)" }}
     >
       <div className="max-w-[1080px] mx-auto px-4 py-8 lg:py-12">
         {/* Top bar — breadcrumb left, share right */}

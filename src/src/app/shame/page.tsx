@@ -48,7 +48,7 @@ export default async function WallOfShamePage() {
   return (
     <main
       className="min-h-screen px-4 py-10"
-      style={{ backgroundColor: "var(--color-ink-950)" }}
+      style={{ backgroundColor: "var(--color-ink-950, #0A0705)" }}
     >
       <div className="max-w-[1080px] mx-auto">
         {/* Header */}
