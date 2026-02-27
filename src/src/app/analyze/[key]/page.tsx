@@ -94,13 +94,23 @@ export default function AnalyzeLoadingPage() {
           setError("Rate limit reached. Please wait a moment and try again.");
           return;
         }
+        // 408 = our hard timeout — retriable, show specific message
+        if (res.status === 408) {
+          setError(body.error ?? "Analysis timed out. Please try again.");
+          return;
+        }
+        // Other non-retriable errors — show the message directly
+        if (res.status === 503 || res.status === 400 || res.status === 422) {
+          setError(body.error ?? `Server error (${res.status}). Please try again.`);
+          return;
+        }
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
 
       const data = await res.json() as { characterKey?: string };
       completedRef.current = true;
 
-      const characterKey = data.characterKey ?? key;
+      const characterKey = data.characterKey ?? decodeURIComponent(key);
       router.push(`/character/${characterKey}`);
     } catch (err) {
       if (++attemptRef.current >= MAX_POLL_ATTEMPTS) {
@@ -130,20 +140,38 @@ export default function AnalyzeLoadingPage() {
         style={{ backgroundColor: "var(--color-ink-950)" }}
       >
         <div className="text-center max-w-md">
-          <p className="text-base mb-4" style={{ color: "var(--color-washi-400)" }}>
+          <p className="text-base mb-6" style={{ color: "var(--color-washi-400)" }}>
             {error}
           </p>
-          <button
-            onClick={() => router.push("/")}
-            className="px-6 py-3 rounded-full text-sm font-medium"
-            style={{
-              backgroundColor: "var(--color-vermillion-500)",
-              color: "var(--color-washi-100)",
-              borderRadius: "9999px",
-            }}
-          >
-            ← Back to home
-          </button>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => {
+                setError(null);
+                attemptRef.current = 0;
+                completedRef.current = false;
+                void runAnalysis();
+              }}
+              className="px-6 py-3 rounded-full text-sm font-medium"
+              style={{
+                backgroundColor: "var(--color-vermillion-500)",
+                color: "var(--color-washi-100)",
+                borderRadius: "9999px",
+              }}
+            >
+              Try again
+            </button>
+            <button
+              onClick={() => router.push("/")}
+              className="px-6 py-3 rounded-full text-sm font-medium border"
+              style={{
+                borderColor: "var(--color-ink-600)",
+                color: "var(--color-washi-400)",
+                borderRadius: "9999px",
+              }}
+            >
+              ← Back to home
+            </button>
+          </div>
         </div>
       </main>
     );

@@ -29,6 +29,7 @@ interface AnalysisInput {
       tropeBonus: number;
     };
     q4: number;
+    q5: number;
     baseScore: number;
     finalScore: number;
     grade: Grade;
@@ -147,40 +148,53 @@ export async function persistAnalysis(input: AnalysisInput): Promise<PersistResu
   const q1Data = parsed["q1"] as { sub_scores: Record<string, number>; rationale: string; register: string };
   const q2Data = parsed["q2"] as { sub_scores: Record<string, number>; rationale: string; register: string };
   const q4Data = parsed["q4"] as { sub_scores: Record<string, number>; rationale: string; register: string };
+  const q5ScoreData = parsed["q5_scored"] as { sub_scores: Record<string, number>; rationale: string; register: string } | undefined;
   const q3Full = parsed["q3"] as { rationale: string; register: string };
   const q5Full = parsed["q5"] as { flag: Q5Flag; notes?: string };
 
+  const confidence = parsed["confidence"] as string | undefined;
   const analysisData = {
     character_id: character.id,
     q1_score: scoring.q1,
     q1_rationale: q1Data.rationale,
+    q1_register: q1Data.register ?? null,
     q2_score: scoring.q2,
     q2_rationale: q2Data.rationale,
+    q2_register: q2Data.register ?? null,
     q3_score: scoring.q3.score,
     q3_rationale: q3Full.rationale,
+    q3_register: q3Full.register ?? null,
     q4_score: scoring.q4,
     q4_rationale: q4Data.rationale,
+    q4_register: q4Data.register ?? null,
+    q5_score: scoring.q5,
+    q5_rationale: q5ScoreData?.rationale ?? null,
+    q5_register: q5ScoreData?.register ?? null,
     q5_flag: q5Full.flag,
     q5_notes: q5Full.notes ?? null,
     base_score: scoring.baseScore,
-    trope_penalty: scoring.q3.penaltyCap,
+    trope_penalty_raw: scoring.q3.tropePenaltyRaw,
+    trope_penalty_capped: scoring.q3.penaltyCap,
     trope_bonus: scoring.q3.tropeBonus,
     final_score: scoring.finalScore,
     grade: scoring.grade,
+    grade_label: scoring.gradeLabel,
     tropes: detectedTropes,
     subversions: null,
     suggestions: parsed["suggestions"] as string,
     summary: parsed["summary"] as string,
+    confidence: confidence ?? null,
+    confidence_notes: parsed["confidence_notes"] as string ?? null,
     rubric_version: parsed["rubric_version"] as string,
     model_version: input.modelVersion,
     prompt_template_version: input.promptTemplateVersion,
     processing_duration_ms: input.processingDurationMs,
   };
 
-  const { data: analysis } = await (supabase as unknown as {
+  const { data: analysis, error: analysisError } = await (supabase as unknown as {
     from: (t: string) => {
       insert: (v: Record<string, unknown>) => {
-        select: (q: string) => { single: () => Promise<{ data: { id: string } | null }> };
+        select: (q: string) => { single: () => Promise<{ data: { id: string } | null; error: { message: string; code: string } | null }> };
       };
     };
   })
@@ -189,7 +203,8 @@ export async function persistAnalysis(input: AnalysisInput): Promise<PersistResu
     .select("id")
     .single();
 
-  if (!analysis?.id) throw new Error("Failed to insert analysis");
+  if (analysisError) console.error("[persist] Analysis insert error:", analysisError.code, analysisError.message);
+  if (!analysis?.id) throw new Error(`Failed to insert analysis: ${analysisError?.message ?? "unknown"}`);
 
   // 4. Store raw prompt + response in analysis_raw (secured, admin only)
   await (supabase as unknown as {

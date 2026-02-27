@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import type { Grade, Q5Flag, DetectedTrope } from "@/lib/supabase/types";
+import { displayScore, SCORE_MAX_DISPLAY } from "@/lib/display";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,12 +31,19 @@ export interface BaseballCardProps {
 // ---------------------------------------------------------------------------
 
 const GRADE_COLORS: Record<Grade, { bg: string; text: string; border: string }> = {
-  "A+": { bg: "rgba(240,165,0,0.15)", text: "#F5BC3A", border: "rgba(240,165,0,0.5)" },
-  "A":  { bg: "rgba(39,174,96,0.15)",  text: "#6FCF97", border: "rgba(39,174,96,0.5)" },
-  "B":  { bg: "rgba(46,204,113,0.10)", text: "#A8E6BE", border: "rgba(46,204,113,0.4)" },
-  "C":  { bg: "rgba(243,156,18,0.10)", text: "#F5C842", border: "rgba(243,156,18,0.4)" },
-  "D":  { bg: "rgba(230,126,34,0.10)", text: "#F0A86B", border: "rgba(230,126,34,0.4)" },
-  "F":  { bg: "rgba(231,76,60,0.20)",  text: "#F5856E", border: "rgba(231,76,60,0.6)" },
+  "A+": { bg: "rgba(240,165,0,0.55)",  text: "#FFFFFF", border: "rgba(240,165,0,0.8)" },
+  "A":  { bg: "rgba(39,174,96,0.50)",  text: "#FFFFFF", border: "rgba(39,174,96,0.75)" },
+  "A-": { bg: "rgba(39,174,96,0.45)",  text: "#FFFFFF", border: "rgba(39,174,96,0.65)" },
+  "B+": { bg: "rgba(52,152,219,0.50)", text: "#FFFFFF", border: "rgba(52,152,219,0.70)" },
+  "B":  { bg: "rgba(52,152,219,0.45)", text: "#FFFFFF", border: "rgba(52,152,219,0.65)" },
+  "B-": { bg: "rgba(52,152,219,0.40)", text: "#FFFFFF", border: "rgba(52,152,219,0.55)" },
+  "C+": { bg: "rgba(243,156,18,0.50)", text: "#FFFFFF", border: "rgba(243,156,18,0.70)" },
+  "C":  { bg: "rgba(243,156,18,0.45)", text: "#FFFFFF", border: "rgba(243,156,18,0.65)" },
+  "C-": { bg: "rgba(243,156,18,0.40)", text: "#FFFFFF", border: "rgba(243,156,18,0.55)" },
+  "D+": { bg: "rgba(230,126,34,0.50)", text: "#FFFFFF", border: "rgba(230,126,34,0.70)" },
+  "D":  { bg: "rgba(230,126,34,0.45)", text: "#FFFFFF", border: "rgba(230,126,34,0.55)" },
+  "D-": { bg: "rgba(230,126,34,0.40)", text: "#FFFFFF", border: "rgba(230,126,34,0.50)" },
+  "F":  { bg: "rgba(231,76,60,0.60)",  text: "#FFFFFF", border: "rgba(231,76,60,0.80)" },
 };
 
 const Q5_COLORS: Record<Q5Flag, { text: string; border: string; bg: string }> = {
@@ -65,7 +73,7 @@ const REGISTER_COLORS: Record<string, { text: string; border: string; bg: string
 // Score count-up hook
 // ---------------------------------------------------------------------------
 
-function useCountUp(target: number, duration = 800): string {
+function useScoreCountUp(target: number, duration = 800): string {
   const [current, setCurrent] = useState(0);
   const preferReducedMotion = useReducedMotion();
 
@@ -98,11 +106,15 @@ function CardFront({
   mediaTitle,
   imageUrl,
   grade,
+  gradeLabel,
+  finalScore,
 }: {
   characterName: string;
   mediaTitle: string;
   imageUrl?: string | null;
   grade: Grade;
+  gradeLabel: string;
+  finalScore: number;
 }) {
   const gradeStyle = GRADE_COLORS[grade];
 
@@ -116,7 +128,7 @@ function CardFront({
         backfaceVisibility: "hidden",
       }}
     >
-      {/* Header — grade badge + title */}
+      {/* Header — brand only */}
       <div className="flex items-start justify-between mb-3">
         <div>
           <p
@@ -132,25 +144,18 @@ function CardFront({
             芹沢テスト
           </p>
         </div>
-        <div
-          className="px-2.5 py-1 rounded-full text-xs font-bold"
-          style={{
-            backgroundColor: gradeStyle.bg,
-            color: gradeStyle.text,
-            border: `1px solid ${gradeStyle.border}`,
-            fontFamily: "var(--font-display)",
-            fontSize: "20px",
-            lineHeight: 1,
-            padding: "4px 12px",
-          }}
+        {/* Grade label — small, top-right, secondary */}
+        <span
+          className="text-[10px] uppercase tracking-widest"
+          style={{ color: gradeStyle.text, fontFamily: "var(--font-mono)", opacity: 0.7 }}
         >
-          {grade}
-        </div>
+          {gradeLabel}
+        </span>
       </div>
 
-      {/* Portrait area */}
+      {/* Portrait area — grade badge overlaid bottom-left */}
       <div
-        className="flex-1 flex items-center justify-center rounded-lg mb-4"
+        className="flex-1 flex items-center justify-center rounded-lg mb-4 relative"
         style={{
           backgroundColor: "var(--color-ink-700)",
           borderRadius: "var(--radius-lg)",
@@ -169,19 +174,49 @@ function CardFront({
         ) : (
           <div className="text-center px-4">
             <div
-              className="text-5xl mb-2 opacity-20"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              {characterName[0]?.toUpperCase()}
-            </div>
-            <p
-              className="text-xs opacity-30"
+              className="text-5xl mb-2 opacity-10"
               style={{ color: "var(--color-washi-400)", fontFamily: "var(--font-jp)" }}
             >
               肖像
-            </p>
+            </div>
           </div>
         )}
+
+        {/* Grade badge — large, overlaid bottom-left of portrait */}
+        <div
+          className="absolute bottom-3 left-3 flex flex-col items-center justify-center rounded-2xl"
+          style={{
+            width: 76,
+            height: 76,
+            backgroundColor: gradeStyle.bg,
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            border: `2px solid ${gradeStyle.border}`,
+            boxShadow: `0 0 24px ${gradeStyle.border}`,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "38px",
+              lineHeight: 1,
+              color: gradeStyle.text,
+            }}
+          >
+            {grade}
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "12px",
+              color: gradeStyle.text,
+              fontWeight: 600,
+              marginTop: 2,
+            }}
+          >
+            {(finalScore * 10).toFixed(0)}
+          </span>
+        </div>
       </div>
 
       {/* Character name */}
@@ -228,7 +263,7 @@ function CardBack({
   detectedTropes: DetectedTrope[];
   summary: string;
 }) {
-  const displayScore = useCountUp(finalScore, 900);
+  const displayScoreValue = useScoreCountUp(finalScore * 10, 900);
   const gradeStyle = GRADE_COLORS[grade];
   const q5Style = Q5_COLORS[q5Flag];
 
@@ -253,13 +288,13 @@ function CardBack({
               color: "var(--color-washi-100)",
             }}
           >
-            {displayScore}
+            {displayScoreValue}
           </span>
           <span
             className="text-sm ml-2"
             style={{ color: "var(--color-washi-400)", fontFamily: "var(--font-mono)" }}
           >
-            / 10
+            / {SCORE_MAX_DISPLAY}
           </span>
         </div>
         <div
@@ -437,6 +472,8 @@ export function BaseballCard(props: BaseballCardProps) {
           mediaTitle={mediaTitle}
           imageUrl={imageUrl}
           grade={grade}
+          gradeLabel={gradeLabel}
+          finalScore={finalScore}
         />
 
         <CardBack

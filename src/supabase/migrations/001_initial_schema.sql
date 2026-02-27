@@ -201,6 +201,13 @@ CREATE TABLE analyses (
   q5_wall_of_shame_eligible     BOOLEAN      NOT NULL DEFAULT FALSE,
     -- TRUE only when q5_flag = 'yellowface' AND at least one major trope detected
 
+  -- Q5 (scored) — Narrative Dignity & Gaze (0.00–2.00)
+  -- Distinct from the q5_flag above (production authenticity).
+  -- Measures whether the narrative apparatus treats the character as subject or spectacle.
+  q5_score                      DECIMAL(3,2),
+  q5_rationale                  TEXT,
+  q5_register                   VARCHAR(20),
+
   -- Server-computed scores (computeScores() overwrites model arithmetic)
   base_score                    DECIMAL(4,2),
     -- Q1 + Q2 + 2.00 (Q3 base) + Q4, computed before penalty cap

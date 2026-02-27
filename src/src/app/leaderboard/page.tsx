@@ -30,8 +30,11 @@ const TABS = [
 ];
 
 const GRADE_COLORS: Record<Grade, string> = {
-  "A+": "#F5BC3A", "A": "#6FCF97", "B": "#A8E6BE",
-  "C": "#F5C842", "D": "#F0A86B", "F": "#F5856E",
+  "A+": "#F5BC3A", "A":  "#6FCF97", "A-": "#8DD9AB",
+  "B+": "#7EC8E3", "B":  "#A8D8EA", "B-": "#BDE3EF",
+  "C+": "#F5C842", "C":  "#F5D06B", "C-": "#F5DB8E",
+  "D+": "#F0A86B", "D":  "#F0B888", "D-": "#F0C8A5",
+  "F":  "#F5856E",
 };
 
 export default async function LeaderboardPage({
@@ -188,7 +191,7 @@ export default async function LeaderboardPage({
                   {/* Score + grade */}
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <span className="text-sm" style={{ color: gradeColor, fontFamily: "var(--font-mono)" }}>
-                      {row.latest_final_score.toFixed(2)}
+                      {(row.latest_final_score * 10).toFixed(1)}
                     </span>
                     <span className="text-base font-bold" style={{ color: gradeColor, fontFamily: "var(--font-display)" }}>
                       {row.latest_grade}

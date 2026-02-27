@@ -15,10 +15,14 @@ export const maxDuration = 60;
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
+  timeout: 25_000,
+  maxRetries: 0, // We handle retries ourselves in the route loop — SDK retries compound to 3× timeout
 });
 
-const MODEL = "claude-sonnet-4-20250514";
-const MAX_TOKENS = 4096;
+// 🐢→🐇 TEMP: using Haiku during UX dev (3–8s vs Sonnet's 20–25s).
+// Switch back to "claude-sonnet-4-20250514" before bulk-caching common characters.
+const MODEL = "claude-haiku-4-5-20251001";
+const MAX_TOKENS = 8192;
 
 interface AnalyzeBody {
   characterName: string;
@@ -69,32 +73,49 @@ export async function POST(
 
   const characterKey = normalizeCharacterKey(characterName, mediaTitle);
 
-  // --- 1. Cache check ---
+  // --- 1. Cache check (Redis → Supabase) ---
   const cached = await getCachedAnalysis(characterKey);
   if (cached) {
     return NextResponse.json({ ...cached, fromCache: true });
   }
 
-  // --- 2. Rate limiting ---
+  // Check Supabase for an existing analysis (survives Redis TTL expiry)
   const supabase = await createClient();
+  const existing = await lookupExistingAnalysis(supabase, characterKey);
+  if (existing) {
+    await setCachedAnalysis(characterKey, existing);
+    return NextResponse.json({ ...existing, fromCache: true });
+  }
+
+  // --- 2. Rate limiting ---
   const { data: { user } } = await supabase.auth.getUser();
   const isAdmin = !!(user && await isUserAdmin(supabase));
 
-  if (!isAdmin) {
+  // Skip rate limiting in local development
+  const isDev = process.env.NODE_ENV === "development";
+
+  if (!isAdmin && !isDev) {
     const identifier = user?.id ?? getAnonymousIdentifier(request);
     const limiter = user ? userLimiter : anonymousLimiter;
-    const { success, limit, remaining, reset } = await limiter.limit(identifier);
 
-    if (!success) {
+    // Fail-open: if Redis is unreachable, allow the request through
+    let rateLimitResult: { success: boolean; limit: number; remaining: number; reset: number };
+    try {
+      rateLimitResult = await limiter.limit(identifier);
+    } catch {
+      rateLimitResult = { success: true, limit: 0, remaining: 0, reset: 0 };
+    }
+
+    if (!rateLimitResult.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Please wait before running another analysis." },
         {
           status: 429,
           headers: {
-            "X-RateLimit-Limit": String(limit),
-            "X-RateLimit-Remaining": String(remaining),
-            "X-RateLimit-Reset": String(reset),
-            "Retry-After": String(Math.ceil((reset - Date.now()) / 1000)),
+            "X-RateLimit-Limit": String(rateLimitResult.limit),
+            "X-RateLimit-Remaining": String(rateLimitResult.remaining),
+            "X-RateLimit-Reset": String(rateLimitResult.reset),
+            "Retry-After": String(Math.ceil((rateLimitResult.reset - Date.now()) / 1000)),
           },
         }
       );
@@ -138,21 +159,45 @@ export async function POST(
   let rawResponse = "";
 
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      system: template.system_prompt,
-      messages: [{ role: "user", content: userMessage }],
-    });
+    let response: Awaited<ReturnType<typeof anthropic.messages.create>>;
+    try {
+      response = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: MAX_TOKENS,
+        system: template.system_prompt,
+        messages: [{ role: "user", content: userMessage }],
+      });
+    } catch (err) {
+      const isTimeout =
+        err instanceof Error &&
+        (err.name === "APIConnectionTimeoutError" || err.message.includes("timed out"));
+      console.error("[analyze] Anthropic error (attempt", attempt, "):", {
+        name: err instanceof Error ? err.name : "unknown",
+        message: err instanceof Error ? err.message : String(err),
+        status: (err as Record<string, unknown>)?.status,
+      });
+      if (isTimeout) {
+        return NextResponse.json(
+          { error: "Analysis timed out. Claude is under load — please try again in a moment." },
+          { status: 408 }
+        );
+      }
+      throw err;
+    }
 
     rawResponse = response.content[0]?.type === "text" ? response.content[0].text : "";
 
     try {
-      // Strip any accidental markdown fencing (model sometimes wraps despite instructions)
-      const jsonText = rawResponse.replace(/^```json?\s*/i, "").replace(/```\s*$/, "").trim();
+      // Extract JSON object — Claude may wrap in markdown fencing or add commentary
+      const firstBrace = rawResponse.indexOf("{");
+      const lastBrace = rawResponse.lastIndexOf("}");
+      const jsonText = firstBrace >= 0 && lastBrace > firstBrace
+        ? rawResponse.slice(firstBrace, lastBrace + 1)
+        : rawResponse.trim();
       parsed = JSON.parse(jsonText) as Record<string, unknown>;
       break;
-    } catch {
+    } catch (parseErr) {
+      console.error(`[analyze] JSON parse failed (attempt ${attempt}). stop_reason=${response.stop_reason} tokens=${response.usage.output_tokens}/${MAX_TOKENS}`, parseErr instanceof Error ? parseErr.message : "");
       if (attempt === 2) {
         return NextResponse.json(
           { error: "Analysis failed after retry. Claude's response was not valid JSON. Please try again." },
@@ -177,6 +222,12 @@ export async function POST(
   }
 
   // --- 7. Server-side score recomputation (MANDATORY — never trust model math) ---
+  // Inject Q5 sub_scores onto the q5 object that Claude already returned,
+  // so computeScores sees parsed.q5.sub_scores (not a separate q5_scored key).
+  const q5Obj = (parsed! as Record<string, unknown>)["q5"] as Record<string, unknown> | undefined;
+  if (q5Obj && !q5Obj["sub_scores"]) {
+    q5Obj["sub_scores"] = { "5a_framing_dignity": 1.00, "5b_peer_engagement": 1.00, "5c_cultural_framing": 1.00 };
+  }
   const scoring = computeScores(parsed! as Parameters<typeof computeScores>[0]);
 
   // Overwrite model's scoring object with server-computed values
@@ -334,4 +385,66 @@ function buildResult(
     confidenceNotes: parsed["confidence_notes"],
     fromCache,
   };
+}
+
+async function lookupExistingAnalysis(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  characterKey: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const sb = supabase as unknown as {
+      from: (t: string) => {
+        select: (q: string) => {
+          eq: (c: string, v: string) => {
+            single: () => Promise<{ data: Record<string, unknown> | null; error: unknown }>;
+          };
+        };
+      };
+    };
+
+    const { data: char } = await sb
+      .from("characters")
+      .select("id, character_key, latest_analysis_id")
+      .eq("character_key", characterKey)
+      .single();
+
+    if (!char?.latest_analysis_id) return null;
+
+    const { data: analysis } = await sb
+      .from("analyses")
+      .select("*")
+      .eq("id", char.latest_analysis_id as string)
+      .single();
+
+    if (!analysis) return null;
+
+    return {
+      characterKey,
+      characterName: analysis.character_name ?? characterKey.split("|")[0],
+      mediaTitle: analysis.media_title ?? characterKey.split("|")[1],
+      rubricVersion: analysis.rubric_version,
+      promptTemplateVersion: analysis.prompt_template_version,
+      q1: { score: analysis.q1_score, rationale: analysis.q1_rationale, register: analysis.q1_register },
+      q2: { score: analysis.q2_score, rationale: analysis.q2_rationale, register: analysis.q2_register },
+      q3: { score: analysis.q3_score, rationale: analysis.q3_rationale, register: analysis.q3_register, detectedTropes: analysis.tropes },
+      q4: { score: analysis.q4_score, rationale: analysis.q4_rationale, register: analysis.q4_register },
+      q5: { flag: analysis.q5_flag, notes: analysis.q5_notes, score: analysis.q5_score, rationale: analysis.q5_rationale, register: analysis.q5_register },
+      scoring: {
+        baseScore: analysis.base_score,
+        tropePenaltyRaw: analysis.trope_penalty_raw,
+        penaltyCap: analysis.trope_penalty_capped,
+        tropeBonus: analysis.trope_bonus,
+        finalScore: analysis.final_score,
+        grade: analysis.grade,
+        gradeLabel: analysis.grade_label,
+      },
+      suggestions: analysis.suggestions,
+      summary: analysis.summary,
+      confidence: analysis.confidence,
+      confidenceNotes: analysis.confidence_notes,
+      fromCache: false,
+    };
+  } catch {
+    return null;
+  }
 }

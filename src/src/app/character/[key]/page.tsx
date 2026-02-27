@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { BaseballCard } from "@/components/card/BaseballCard";
 import { RuleCard } from "@/components/results/RuleCard";
+import { getCharacterImageUrl } from "@/lib/character-images";
 import type { Character, Analysis, MediaProperty, DetectedTrope } from "@/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
@@ -23,7 +24,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ key: string }>;
 }): Promise<Metadata> {
-  const { key } = await params;
+  const { key: rawKeyMeta } = await params;
+  const key = decodeURIComponent(rawKeyMeta);
   const supabase = await createClient();
 
   const { data } = await (supabase as unknown as {
@@ -87,6 +89,11 @@ const Q4_LABELS: Record<string, string> = {
   "4b_emotional_counterfactual":  "4b — Emotional counterfactual",
   "4c_irreversible_decision":     "4c — Irreversible decision",
 };
+const Q5_SCORE_LABELS: Record<string, string> = {
+  "5a_framing_dignity":  "5a — Framing dignity",
+  "5b_peer_engagement":  "5b — Peer engagement",
+  "5c_cultural_framing": "5c — Cultural framing",
+};
 
 // ---------------------------------------------------------------------------
 // Page
@@ -97,51 +104,72 @@ export default async function CharacterPage({
 }: {
   params: Promise<{ key: string }>;
 }) {
-  const { key } = await params;
+  const { key: rawKey } = await params;
+  // Next.js does NOT decode %7C (pipe) in route params — do it manually
+  const key = decodeURIComponent(rawKey);
   const supabase = await createClient();
 
-  const { data: characterRaw, error } = await (supabase as unknown as {
+  type CharacterQueryRow = {
+    id: string;
+    name: string;
+    character_key: string;
+    character_image_url: string | null;
+    latest_analysis_id: string | null;
+    media_properties: { title: string; release_year: number | null; media_type: string | null } | null;
+  };
+
+  // Step 1: fetch character + media
+  const { data: charData, error: charError } = await (supabase as unknown as {
     from: (t: string) => {
       select: (q: string) => {
         eq: (c: string, v: string) => {
-          single: () => Promise<{ data: CharacterRow | null; error: { message: string } | null }>;
+          single: () => Promise<{ data: CharacterQueryRow | null; error: { message: string; code: string } | null }>;
         };
       };
     };
   })
     .from("characters")
-    .select(`
-      *,
-      media_properties (*),
-      analyses!latest_analysis_id (
-        id,
-        q1_score, q1_rationale,
-        q2_score, q2_rationale,
-        q3_score, q3_rationale,
-        q4_score, q4_rationale,
-        q5_flag, q5_notes,
-        base_score, trope_penalty, trope_bonus,
-        final_score, grade,
-        tropes, subversions, suggestions, summary,
-        rubric_version, model_version, prompt_template_version,
-        processing_duration_ms, created_at
-      )
-    `)
+    .select("id, name, character_key, character_image_url, latest_analysis_id, media_properties(title, release_year, media_type)")
     .eq("character_key", key)
     .single();
 
-  if (error || !characterRaw) {
+  if (charError || !charData) {
+    console.error("[character page] fetch error:", charError?.message ?? "no data", "key:", key);
     notFound();
   }
 
-  const character = characterRaw as CharacterRow;
-  const analysis = character.analyses;
-  const media = character.media_properties;
-
-  if (!analysis) {
-    // Character exists but has no analysis yet (edge case — redir to analyze)
+  // Step 2: fetch the analysis directly by ID
+  if (!charData.latest_analysis_id) {
+    // Character exists but no analysis — redirect back to run one
     notFound();
   }
+
+  const { data: analysisData, error: analysisError } = await (supabase as unknown as {
+    from: (t: string) => {
+      select: (q: string) => {
+        eq: (c: string, v: string) => {
+          single: () => Promise<{ data: Analysis | null; error: { message: string } | null }>;
+        };
+      };
+    };
+  })
+    .from("analyses")
+    .select("id, q1_score, q1_rationale, q2_score, q2_rationale, q3_score, q3_rationale, q4_score, q4_rationale, q5_flag, q5_notes, base_score, trope_penalty_raw, trope_penalty_capped, trope_bonus, final_score, grade, tropes, subversions, suggestions, summary, rubric_version, model_version, prompt_template_version, processing_duration_ms, created_at")
+    .eq("id", charData.latest_analysis_id)
+    .single();
+
+  if (analysisError || !analysisData) {
+    console.error("[character page] analysis fetch error:", analysisError?.message ?? "no data");
+    notFound();
+  }
+
+  const character = {
+    ...charData,
+    analyses: analysisData,
+    media_properties: charData.media_properties,
+  } as CharacterRow;
+  const analysis = analysisData;
+  const media = charData.media_properties;
 
   const detectedTropes: DetectedTrope[] = (analysis.tropes as DetectedTrope[]) ?? [];
 
@@ -160,8 +188,8 @@ export default async function CharacterPage({
       style={{ backgroundColor: "var(--color-ink-950)" }}
     >
       <div className="max-w-[1080px] mx-auto px-4 py-8 lg:py-12">
-        {/* Breadcrumb ghost pill */}
-        <nav className="mb-6">
+        {/* Top bar — breadcrumb left, share right */}
+        <nav className="mb-6 flex items-center justify-between">
           <a
             href="/"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors"
@@ -174,6 +202,19 @@ export default async function CharacterPage({
             }}
           >
             ← Analyze another
+          </a>
+          <a
+            href={`/api/characters/${key}/share`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors"
+            style={{
+              backgroundColor: "var(--color-ink-800)",
+              borderColor: "var(--color-ink-600)",
+              color: "var(--color-washi-400)",
+              fontFamily: "var(--font-body)",
+              borderRadius: "9999px",
+            }}
+          >
+            Share ↗
           </a>
         </nav>
 
@@ -190,28 +231,16 @@ export default async function CharacterPage({
               q5ActorName={null}
               detectedTropes={detectedTropes}
               summary={analysis.summary ?? ""}
-              imageUrl={character.character_image_url}
+              imageUrl={getCharacterImageUrl(character.character_key, character.character_image_url)}
               flippable={true}
               defaultFlipped={false}
             />
 
-            {/* Share + Re-analyze actions */}
-            <div className="mt-4 flex gap-2">
-              <a
-                href={`/api/characters/${key}/share`}
-                className="flex-1 py-2 text-center text-xs rounded-full border"
-                style={{
-                  borderColor: "var(--color-ink-600)",
-                  color: "var(--color-washi-400)",
-                  fontFamily: "var(--font-body)",
-                  borderRadius: "9999px",
-                }}
-              >
-                Share
-              </a>
+            {/* Re-analyze action */}
+            <div className="mt-4">
               <a
                 href={`/analyze/${key}?name=${encodeURIComponent(character.name)}&media=${encodeURIComponent(media?.title ?? "")}`}
-                className="flex-1 py-2 text-center text-xs rounded-full border"
+                className="block py-2 text-center text-xs rounded-full border transition-colors"
                 style={{
                   borderColor: "var(--color-ink-600)",
                   color: "var(--color-washi-400)",
@@ -254,7 +283,7 @@ export default async function CharacterPage({
               </p>
             </div>
 
-            {/* Q1 */}
+            {/* Q1 — open by default so users know cards are expandable */}
             {analysis.q1_score !== null && (
               <RuleCard
                 rule="Q1"
@@ -262,6 +291,7 @@ export default async function CharacterPage({
                 rationale={analysis.q1_rationale ?? ""}
                 register="teachable"
                 subScores={q1SubScores}
+                defaultOpen
                 subScoreLabels={Q1_LABELS}
               />
             )}
@@ -313,8 +343,20 @@ export default async function CharacterPage({
               />
             )}
 
-            {/* Suggestions */}
-            {analysis.suggestions && (
+            {/* Q5 */}
+            {(analysis as unknown as Record<string, unknown>)["q5_score"] != null && (
+              <RuleCard
+                rule="Q5"
+                score={(analysis as unknown as Record<string, number>)["q5_score"]}
+                rationale={((analysis as unknown as Record<string, unknown>)["q5_rationale"] as string) ?? ""}
+                register={((analysis as unknown as Record<string, unknown>)["q5_register"] as string) ?? "teachable"}
+                subScores={null}
+                subScoreLabels={Q5_SCORE_LABELS}
+              />
+            )}
+
+            {/* Japanifornia Verdict */}
+            {analysis.summary && (
               <div
                 className="rounded-xl border p-5 mt-4"
                 style={{
@@ -327,13 +369,13 @@ export default async function CharacterPage({
                   className="text-xs uppercase tracking-widest mb-3"
                   style={{ color: "var(--color-washi-400)", fontFamily: "var(--font-mono)" }}
                 >
-                  Suggestions for improvement
+                  Japanifornia Says...
                 </h3>
                 <p
-                  className="text-sm leading-relaxed whitespace-pre-wrap"
-                  style={{ color: "var(--color-washi-300)" }}
+                  className="text-sm leading-relaxed italic"
+                  style={{ color: "var(--color-washi-200)" }}
                 >
-                  {analysis.suggestions}
+                  {analysis.summary}
                 </p>
               </div>
             )}

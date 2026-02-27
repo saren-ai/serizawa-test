@@ -41,6 +41,12 @@ export interface Q4SubScores {
   "4c_irreversible_decision": number;
 }
 
+export interface Q5SubScores {
+  "5a_framing_dignity": number;
+  "5b_peer_engagement": number;
+  "5c_cultural_framing": number;
+}
+
 export interface Q3Result {
   score: number;
   tropePenaltyRaw: number;
@@ -53,6 +59,7 @@ export interface ScoringResult {
   q2: number;
   q3: Q3Result;
   q4: number;
+  q5: number;
   baseScore: number;
   finalScore: number;
   grade: Grade;
@@ -92,6 +99,23 @@ export function computeQ4Score(subScores: Q4SubScores): number {
     subScores["4a_plot_counterfactual"]      * 0.40 +
     subScores["4b_emotional_counterfactual"] * 0.35 +
     subScores["4c_irreversible_decision"]    * 0.25
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Q5 — Narrative Dignity & Gaze (weights: 40 / 35 / 25)
+//
+// Does the narrative apparatus — camera, script, other characters' reactions,
+// cultural framing — treat the Japanese character as a subject or a spectacle?
+// Distinct from Q1 (the character's own inner life) because this measures how
+// the *story itself* looks at them.
+// ---------------------------------------------------------------------------
+
+export function computeQ5Score(subScores: Q5SubScores): number {
+  return r2(
+    subScores["5a_framing_dignity"]  * 0.40 +
+    subScores["5b_peer_engagement"]  * 0.35 +
+    subScores["5c_cultural_framing"] * 0.25
   );
 }
 
@@ -148,11 +172,11 @@ export function computeQ3Score(
 // ---------------------------------------------------------------------------
 
 /**
- * BaseScore = Q1 + Q2 + 2.00 (Q3 base) + Q4
+ * BaseScore = Q1 + Q2 + 2.00 (Q3 base) + Q4 + Q5
  * Must be computed BEFORE applying Q3 penalty cap.
  */
-export function computeBaseScore(q1: number, q2: number, q4: number): number {
-  return r2(q1 + q2 + Q3_BASE + q4);
+export function computeBaseScore(q1: number, q2: number, q4: number, q5: number): number {
+  return r2(q1 + q2 + Q3_BASE + q4 + q5);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,21 +187,31 @@ export function computeFinalScore(
   q1: number,
   q2: number,
   q3: number,
-  q4: number
+  q4: number,
+  q5: number
 ): number {
-  return r2(Math.max(0, Math.min(10, q1 + q2 + q3 + q4)));
+  return r2(Math.max(0, Math.min(10, q1 + q2 + q3 + q4 + q5)));
 }
 
 // ---------------------------------------------------------------------------
 // Grade bands (PRD §8.7)
 // ---------------------------------------------------------------------------
 
+// Grade bands match standard US high school scale on the 0–100 display range.
+// Raw values = display ÷ 10 (scores stored as DECIMAL(4,2) on 0–10 scale).
 const GRADE_BANDS: Array<{ min: number; grade: Grade; label: string }> = [
-  { min: 8.50, grade: "A+", label: "Load-bearing" },
-  { min: 7.50, grade: "A",  label: "Strong pass" },
-  { min: 6.50, grade: "B",  label: "Present but underwritten" },
-  { min: 5.50, grade: "C",  label: "Ornamental" },
-  { min: 4.50, grade: "D",  label: "Prop with lines" },
+  { min: 9.70, grade: "A+", label: "Load-bearing" },
+  { min: 9.30, grade: "A",  label: "Strong pass" },
+  { min: 9.00, grade: "A-", label: "Solid pass" },
+  { min: 8.70, grade: "B+", label: "Passes with distinction" },
+  { min: 8.30, grade: "B",  label: "Present but underwritten" },
+  { min: 8.00, grade: "B-", label: "Passes with caveats" },
+  { min: 7.70, grade: "C+", label: "Ornamental with moments" },
+  { min: 7.30, grade: "C",  label: "Ornamental" },
+  { min: 7.00, grade: "C-", label: "Mostly decorative" },
+  { min: 6.70, grade: "D+", label: "Prop with lines" },
+  { min: 6.30, grade: "D",  label: "Background with dialogue" },
+  { min: 6.00, grade: "D-", label: "Background extra" },
   { min: 0.00, grade: "F",  label: "Wall of Shame candidate" },
 ];
 
@@ -225,7 +259,7 @@ export function computeWeightedLeaderboardScore(
 // ---------------------------------------------------------------------------
 
 /**
- * Wall of Shame: FinalScore < 4.50 (F grade)
+ * Wall of Shame: FinalScore < 6.00 (F grade, display <60)
  * OR (q5_flag = 'yellowface' AND at least one Major trope detected).
  */
 export function isWallOfShameEligible(
@@ -233,7 +267,7 @@ export function isWallOfShameEligible(
   q5Flag: string | null,
   detectedTropes: DetectedTrope[]
 ): boolean {
-  if (finalScore < 4.50) return true;
+  if (finalScore < 6.00) return true;
   if (
     q5Flag === "yellowface" &&
     detectedTropes.some((t) => t.severity === "major")
@@ -244,13 +278,13 @@ export function isWallOfShameEligible(
 }
 
 /**
- * Hall of Fame: FinalScore >= 8.50 AND analysis_count >= 5.
+ * Hall of Fame: FinalScore >= 9.30 (A, display ≥93) AND analysis_count >= 5.
  */
 export function isHallOfFameEligible(
   finalScore: number,
   analysisCount: number
 ): boolean {
-  return finalScore >= 8.50 && analysisCount >= 5;
+  return finalScore >= 9.30 && analysisCount >= 5;
 }
 
 // ---------------------------------------------------------------------------
@@ -269,17 +303,19 @@ export function computeScores(parsed: {
   q2: { sub_scores: Q2SubScores };
   q3: { detected_tropes: DetectedTrope[] };
   q4: { sub_scores: Q4SubScores };
+  q5: { sub_scores: Q5SubScores };
 }): ScoringResult {
   const q1 = computeQ1Score(parsed.q1.sub_scores);
   const q2 = computeQ2Score(parsed.q2.sub_scores);
   const q4 = computeQ4Score(parsed.q4.sub_scores);
+  const q5 = computeQ5Score(parsed.q5.sub_scores);
 
-  const baseScore = computeBaseScore(q1, q2, q4);
+  const baseScore = computeBaseScore(q1, q2, q4, q5);
   const q3Result = computeQ3Score(parsed.q3.detected_tropes, baseScore);
 
-  const finalScore = computeFinalScore(q1, q2, q3Result.score, q4);
+  const finalScore = computeFinalScore(q1, q2, q3Result.score, q4, q5);
   const grade = computeGrade(finalScore);
   const gradeLabel = computeGradeLabel(grade);
 
-  return { q1, q2, q3: q3Result, q4, baseScore, finalScore, grade, gradeLabel };
+  return { q1, q2, q3: q3Result, q4, q5, baseScore, finalScore, grade, gradeLabel };
 }

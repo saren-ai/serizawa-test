@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Grade, Q5Flag } from "@/lib/supabase/types";
+import { displayScore } from "@/lib/display";
 
 interface CharacterCardProps {
   characterKey: string;
@@ -17,9 +18,16 @@ interface CharacterCardProps {
 const GRADE_TEXT: Record<Grade, string> = {
   "A+": "#F5BC3A",
   "A":  "#6FCF97",
-  "B":  "#A8E6BE",
-  "C":  "#F5C842",
-  "D":  "#F0A86B",
+  "A-": "#8DD9AB",
+  "B+": "#7EC8E3",
+  "B":  "#A8D8EA",
+  "B-": "#BDE3EF",
+  "C+": "#F5C842",
+  "C":  "#F5D06B",
+  "C-": "#F5DB8E",
+  "D+": "#F0A86B",
+  "D":  "#F0B888",
+  "D-": "#F0C8A5",
   "F":  "#F5856E",
 };
 
@@ -113,7 +121,7 @@ export function CharacterCard({
           className="text-xs mt-1"
           style={{ color: gradeColor, fontFamily: "var(--font-mono)" }}
         >
-          {finalScore.toFixed(2)}
+          {displayScore(finalScore)}
         </p>
       </div>
     </Link>

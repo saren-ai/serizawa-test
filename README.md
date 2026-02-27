@@ -12,9 +12,9 @@ Named for Dr. Ishirō Serizawa — 1954 *Godzilla* — the brooding scientist wh
 
 ## What It Does
 
-The Serizawa Test scores Japanese and Nikkei characters in Western media on a **0–10 weighted scale** using five structured criteria — the Serizawa Five. It combines:
+The Serizawa Test scores Japanese and Nikkei characters in Western media on a **0–100 display scale** (internally 0–10 weighted) using five structured criteria — the Serizawa Five. It combines:
 
-- **AI analysis** via Claude Sonnet 4 applying the Serizawa Framework
+- **AI analysis** via Claude applying the Serizawa Framework
 - **Community validation** through a three-tier scoring system (AI / Critics / Audience)
 - **Trope detection** against a 34-entry taxonomy with tonal register tags (🚨 📚 😂)
 - **Longitudinal tracking** — every analysis is versioned and auditable
@@ -24,15 +24,49 @@ The Serizawa Test scores Japanese and Nikkei characters in Western media on a **
 
 ## The Serizawa Five
 
-| Rule | Name | Core question |
-|---|---|---|
-| Q1 | Human Individuality | Does this character have goals, flaws, and an inner life independent of their ethnicity? |
-| Q2 | Distinctly Japanese Identity | Is Japaneseness expressed through psychology and specificity — not props and pan-Asian blur? |
-| Q3 | Avoidance of Harmful Tropes | Does the portrayal avoid or subvert the Serizawa Trope Taxonomy? |
-| Q4 | Narrative Impact | Is this character load-bearing, or narrative furniture? |
-| Q5 | Ethnic Authenticity | Is the character played by a Japanese or Japanese-American actor? *(flag only — not scored)* |
+| Rule | Name | Core question | Weight |
+|---|---|---|---|
+| Q1 | Human Individuality | Does this character have goals, flaws, and an inner life independent of their ethnicity? | 30% |
+| Q2 | Distinctly Japanese Identity | Is Japaneseness expressed through psychology and specificity — not props and pan-Asian blur? | 25% |
+| Q3 | Avoidance of Harmful Tropes | Does the portrayal avoid or subvert the Serizawa Trope Taxonomy? | 25% |
+| Q4 | Narrative Impact | Is this character load-bearing, or narrative furniture? | 20% |
+| Q5 | Narrative Dignity & Gaze | Is the character portrayed with dignity, agency, and free of objectifying framing? | scored separately |
+
+**Q5 sub-criteria:** Gaze & Framing (40%) / Agency & Dignity (35%) / Sexual Objectification Avoidance (25%)
 
 Full rubric, sub-criteria, and scoring algorithm: [The Serizawa Five](wiki/The-Serizawa-Five.md)
+
+---
+
+## Score Display
+
+Scores are displayed on a **0–100 scale** for intuitive reading. All internal calculations use the 0–10 weighted system defined in the rubric.
+
+| Display | Internal | Meaning |
+|---|---|---|
+| 0–100 | 0–10 | FinalScore (weighted Q1–Q4 + trope penalties/bonuses) |
+| 0–20 per rule | 0–2 per rule | Individual question scores |
+
+---
+
+## Grade Bands
+
+13-tier A+–F system aligned to high school grading conventions:
+
+| Score (0–100) | Grade | Label |
+|---|---|---|
+| ≥ 97 | A+ | Load-bearing |
+| 93–96 | A | Excellent |
+| 90–92 | A− | Strong pass |
+| 87–89 | B+ | Above average |
+| 83–86 | B | Solid |
+| 80–82 | B− | Present but underwritten |
+| 77–79 | C+ | Mixed |
+| 73–76 | C | Ornamental |
+| 70–72 | C− | Thin |
+| 60–69 | D | Prop with lines |
+| 50–59 | D− | Barely present |
+| < 50 | F | Wall of Shame candidate |
 
 ---
 
@@ -61,6 +95,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) |
 | `UPSTASH_REDIS_REST_URL` | [upstash.com](https://upstash.com) |
 | `UPSTASH_REDIS_REST_TOKEN` | [upstash.com](https://upstash.com) |
+| `CRON_SECRET` | Any strong random string (used by Vercel cron auth) |
 
 ### Database Setup
 
@@ -76,10 +111,11 @@ supabase db push
 
 - **Next.js 14** (App Router) + TypeScript
 - **Tailwind CSS** + Headless UI
-- **Supabase** (Postgres + Auth + Storage)
-- **Anthropic Claude Sonnet 4** (`claude-sonnet-4-20250514`)
-- **Upstash Redis** (analysis cache)
-- **Vercel** deployment
+- **Framer Motion** (all animations)
+- **Supabase** (Postgres + Auth + Storage + RLS)
+- **Anthropic Claude** — Haiku 4.5 (`claude-haiku-4-5-20251001`) for dev, Sonnet 4 (`claude-sonnet-4-20250514`) for production
+- **Upstash Redis** (analysis cache + rate limiting)
+- **Vercel** deployment + cron jobs
 
 ---
 
@@ -97,16 +133,16 @@ Full taxonomy: [Trope-Taxonomy.md](wiki/Trope-Taxonomy.md) *(auto-generated nigh
 
 ---
 
-## Grade Bands
+## Bulk Import
 
-| Score | Grade | Label |
-|---|---|---|
-| ≥ 8.50 | A+ | Load-bearing |
-| 7.50–8.49 | A | Strong pass |
-| 6.50–7.49 | B | Present but underwritten |
-| 5.50–6.49 | C | Ornamental |
-| 4.50–5.49 | D | Prop with lines |
-| < 4.50 | F | Wall of Shame candidate |
+Admins can queue multiple character analyses via CSV at `/admin/bulk-import`. The system:
+
+1. Parses CSV (character name, media title, year, media type)
+2. Creates a job record in `bulk_jobs`
+3. Processes one item per minute via Vercel cron (`/api/cron/bulk`)
+4. Caches each result in Redis; persists to Supabase on completion
+
+Required database tables: `bulk_jobs`, `bulk_items` (see `supabase/migrations/`).
 
 ---
 
@@ -121,6 +157,12 @@ The Serizawa Test builds on a tradition of representation frameworks:
 - DuVernay Test (2016) — Manohla Dargis
 - Latif Sisters Test (2016) — Nadia & Leila Latif / The Guardian
 - Dr. Ishirō Serizawa — 1954 *Godzilla* — the standard we name ourselves after
+
+---
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for responsible disclosure policy.
 
 ---
 

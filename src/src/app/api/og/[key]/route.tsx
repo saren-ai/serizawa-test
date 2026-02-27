@@ -6,11 +6,10 @@ import { computeGrade } from "@/lib/scoring";
 export const runtime = "edge";
 
 const GRADE_COLORS: Record<string, string> = {
-  "A+": "#F5BC3A",
-  "A":  "#6FCF97",
-  "B":  "#A8E6BE",
-  "C":  "#F5C842",
-  "D":  "#F0A86B",
+  "A+": "#F5BC3A", "A":  "#6FCF97", "A-": "#8DD9AB",
+  "B+": "#7EC8E3", "B":  "#A8D8EA", "B-": "#BDE3EF",
+  "C+": "#F5C842", "C":  "#F5D06B", "C-": "#F5DB8E",
+  "D+": "#F0A86B", "D":  "#F0B888", "D-": "#F0C8A5",
   "F":  "#F5856E",
 };
 

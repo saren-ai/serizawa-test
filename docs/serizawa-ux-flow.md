@@ -414,25 +414,32 @@ RIGHT / BELOW:
   Character name (H2, DM Sans 700, 28px)
   Media title · Year · Type (DM Sans 400, 16px, washi-300)
   
-  Three-tier score display:
+  Three-tier score display (0–100 scale):
     ┌──────────────────────────────────────┐
     │  🤖 AI      🎓 Critics   👥 Audience │
-    │  8.47       8.20         8.61        │
-    │  [grade A]  [3 votes]    [12 votes]  │
+    │  84.7       82.0         86.1        │
+    │  [grade B]  [3 votes]    [12 votes]  │
     └──────────────────────────────────────┘
     
     If gap > 1.0 between any two scores:
     "Critics rate this 1.2pts lower → See disputes"
   
-  Rule breakdown (4 cards, stacked, collapsed):
+  Rule breakdown (5 cards, stacked, collapsed):
+    Q1–Q4 scored rules + Q5 Narrative Dignity & Gaze
     Each card tap expands:
       Rule name (EN + JP)
-      Score (JetBrains Mono)
+      Score: X / 20 (JetBrains Mono — displayed on 0–20 scale)
       Score bar (pill, animated)
       Sub-scores (three rows, smaller)
       Rationale text
       Vote buttons (agree / disagree / indifferent)
         Login prompt if logged out
+  
+  Q5 card (Narrative Dignity & Gaze):
+    Displayed separately after Q1–Q4
+    Sub-scores: Gaze & Framing / Agency & Dignity / Objectification Avoidance
+    Note: "Q5 is a companion criterion — not averaged into the final grade"
+    Ethnic authenticity note (actor heritage, if known)
   
   Detected tropes (pill row, horizontal scroll):
     Each pill tap expands tooltip:
@@ -440,9 +447,6 @@ RIGHT / BELOW:
       Severity + Register
       Evidence quote
       [Dispute this]
-  
-  Q5 flag (prominent pill):
-    Full actor name and heritage note
   
   Suggestions section:
     "How this could score higher" (collapsible)
@@ -777,9 +781,14 @@ Prevents accidental back navigation during analysis.
 **Analysis fails (API error):**
 ```
   😕
-  "Analysis didn't complete. Claude is probably thinking very hard."
-  [ Try again ]  [ Go home ]
-  (error logged; no partial data shown)
+  Specific error message displayed immediately — no retry loop:
+  - 400: "Bad request — check character name format"
+  - 408: "Analysis timed out — Claude took too long"
+  - 422: "Couldn't parse the AI response"
+  - 503: "No active prompt template found — contact admin"
+  
+  [ Try again ]  [ ← Back to home ]
+  (error logged; no partial data shown; no automatic retry)
 ```
 
 **Character not found (direct URL):**

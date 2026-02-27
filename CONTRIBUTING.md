@@ -57,12 +57,12 @@ Disputes resolved in your favor count toward Critic eligibility (see §5).
 
 ### 3. Propose a Rule Change
 
-The Serizawa Five (Q1–Q4) and the Q5 flag can be modified if there is a compelling evidence-based case.
+The Serizawa Five (Q1–Q5) can be modified if there is a compelling evidence-based case. Q5 (Narrative Dignity & Gaze) is a scored companion criterion — changes to it affect all future analyses but not historical records.
 
 Rule changes are treated seriously — they affect every existing and future analysis score. The bar is high.
 
 **Required:**
-- Specific rule ID (Q1, Q2, Q3, Q4, or Q5) and sub-criterion if applicable
+- Specific rule ID (Q1–Q5) and sub-criterion if applicable (Q5 sub-criteria: Gaze & Framing / Agency & Dignity / Sexual Objectification Avoidance)
 - Proposed change (be precise — if wording, quote the existing wording and your replacement)
 - Rationale minimum 50 characters — vague suggestions are not reviewed
 - At least one evidence link (academic paper, documented example, existing test framework comparison)

@@ -37,7 +37,12 @@ export type MediaType =
   | "game"
   | "other";
 
-export type Grade = "A+" | "A" | "B" | "C" | "D" | "F";
+export type Grade =
+  | "A+" | "A" | "A-"
+  | "B+" | "B" | "B-"
+  | "C+" | "C" | "C-"
+  | "D+" | "D" | "D-"
+  | "F";
 
 export type VoteValue = "agree" | "disagree" | "indifferent";
 

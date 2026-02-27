@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { displayScore, displayQScore } from "@/lib/display";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Grade } from "@/lib/supabase/types";
@@ -20,8 +21,11 @@ interface CharacterData {
 }
 
 const GRADE_COLORS: Record<Grade, string> = {
-  "A+": "#F5BC3A", "A": "#6FCF97", "B": "#A8E6BE",
-  "C": "#F5C842", "D": "#F0A86B", "F": "#F5856E",
+  "A+": "#F5BC3A", "A":  "#6FCF97", "A-": "#8DD9AB",
+  "B+": "#7EC8E3", "B":  "#A8D8EA", "B-": "#BDE3EF",
+  "C+": "#F5C842", "C":  "#F5D06B", "C-": "#F5DB8E",
+  "D+": "#F0A86B", "D":  "#F0B888", "D-": "#F0C8A5",
+  "F":  "#F5856E",
 };
 
 const RULES = [
@@ -146,7 +150,7 @@ export default function ComparePage() {
                       <button onClick={() => removeCharacter(i)} className="text-xs px-2 py-1 rounded opacity-40 hover:opacity-100" style={{ color: "var(--color-washi-400)" }}>✕</button>
                     </div>
                     <p className="text-3xl mb-2" style={{ fontFamily: "var(--font-display)", color: GRADE_COLORS[c.grade] }}>{c.grade}</p>
-                    <p className="text-lg" style={{ fontFamily: "var(--font-mono)", color: "var(--color-washi-100)" }}>{c.finalScore.toFixed(2)}</p>
+                    <p className="text-lg" style={{ fontFamily: "var(--font-mono)", color: "var(--color-washi-100)" }}>{displayScore(c.finalScore)}</p>
                     <Link href={`/character/${c.characterKey}`} className="text-xs mt-2 block" style={{ color: "var(--color-vermillion-400)" }}>View analysis →</Link>
                   </div>
                 ) : (
@@ -179,7 +183,7 @@ export default function ComparePage() {
                             <div className="score-bar-fill" style={{ width: `${pct}%` }} />
                           </div>
                           <p className="text-[10px] mt-1" style={{ color: c ? "var(--color-washi-300)" : "var(--color-ink-600)", fontFamily: "var(--font-mono)" }}>
-                            {c ? score.toFixed(2) : "—"}
+                            {c ? displayQScore(score as number) : "—"}
                           </p>
                         </div>
                       );

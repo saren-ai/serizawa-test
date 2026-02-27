@@ -3,22 +3,24 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown } from "lucide-react";
+import { displayQScore, Q_MAX_DISPLAY } from "@/lib/display";
 
 interface RuleCardProps {
-  rule: "Q1" | "Q2" | "Q3" | "Q4";
+  rule: "Q1" | "Q2" | "Q3" | "Q4" | "Q5";
   score: number;
   rationale: string;
   register: string;
   subScores?: Record<string, number> | null;
-  /** Labels for each sub-score */
   subScoreLabels?: Record<string, string>;
+  defaultOpen?: boolean;
 }
 
 const RULE_META: Record<string, { title: string; jp: string; maxScore: number }> = {
-  Q1: { title: "Human Individuality", jp: "人間的個性",     maxScore: 2 },
-  Q2: { title: "Japanese Identity",    jp: "日本人のアイデンティティ", maxScore: 2 },
-  Q3: { title: "Avoidance of Tropes",  jp: "有害なトロープの回避",   maxScore: 2 },
-  Q4: { title: "Narrative Impact",     jp: "物語への影響",  maxScore: 2 },
+  Q1: { title: "Human Individuality",    jp: "人間的個性",            maxScore: 2 },
+  Q2: { title: "Japanese Identity",      jp: "日本人のアイデンティティ", maxScore: 2 },
+  Q3: { title: "Avoidance of Tropes",    jp: "有害なトロープの回避",    maxScore: 2 },
+  Q4: { title: "Narrative Impact",       jp: "物語への影響",           maxScore: 2 },
+  Q5: { title: "Narrative Dignity",      jp: "物語の品位",             maxScore: 2 },
 };
 
 const REGISTER_BADGE: Record<string, { label: string; emoji: string; color: string }> = {
@@ -28,8 +30,8 @@ const REGISTER_BADGE: Record<string, { label: string; emoji: string; color: stri
   dual:      { label: "Dual Register",     emoji: "😂→🚨", color: "#C39BD3" },
 };
 
-export function RuleCard({ rule, score, rationale, register, subScores, subScoreLabels }: RuleCardProps) {
-  const [open, setOpen] = useState(false);
+export function RuleCard({ rule, score, rationale, register, subScores, subScoreLabels, defaultOpen = false }: RuleCardProps) {
+  const [open, setOpen] = useState(defaultOpen);
   const meta = RULE_META[rule];
   const pct = (score / meta.maxScore) * 100;
   const registerKey = register.includes("→") ? "dual" : register.toLowerCase();
@@ -71,10 +73,15 @@ export function RuleCard({ rule, score, rationale, register, subScores, subScore
               {meta.title}
             </p>
             <span
-              className="ml-3 flex-shrink-0 text-sm font-semibold"
-              style={{ color: "var(--color-washi-100)", fontFamily: "var(--font-mono)" }}
+              className="ml-3 flex-shrink-0"
+              style={{ fontFamily: "var(--font-mono)" }}
             >
-              {score.toFixed(2)}
+              <span className="text-sm font-semibold" style={{ color: "var(--color-washi-100)" }}>
+                {displayQScore(score)}
+              </span>
+              <span className="text-xs" style={{ color: "var(--color-washi-400)" }}>
+                &thinsp;/ {Q_MAX_DISPLAY}
+              </span>
             </span>
           </div>
           {/* Progress bar */}
