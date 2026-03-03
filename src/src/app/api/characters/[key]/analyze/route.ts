@@ -14,7 +14,7 @@ export const maxDuration = 60;
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
-  timeout: 25_000,
+  timeout: 55_000, // Under Vercel maxDuration 60s; 25s was too tight for Sonnet/slow Claude
   maxRetries: 0,
 });
 
@@ -76,6 +76,18 @@ export async function POST(
     return NextResponse.json({ ...existing, fromCache: true });
   }
 
+  // --- Invite-only: only ALLOWED_ANALYZE_EMAIL can trigger new Claude calls (owner-only API) ---
+  const analyzeOwnerEmail = process.env.ALLOWED_ANALYZE_EMAIL?.trim().toLowerCase();
+  if (analyzeOwnerEmail) {
+    const actorEmail = user?.email?.trim().toLowerCase();
+    if (!actorEmail || actorEmail !== analyzeOwnerEmail) {
+      return NextResponse.json(
+        { error: "Only the app owner can run new analyses. You can still view existing results." },
+        { status: 403 }
+      );
+    }
+  }
+
   // --- Phase 2: Rate limit + prompt template (parallel) ---
   const isDev = process.env.NODE_ENV === "development";
   const isAdmin = !!(user && await isUserAdminFast(supabase, user.id));
@@ -106,11 +118,16 @@ export async function POST(
     ADDITIONAL_CONTEXT: additionalContext ?? null,
   });
 
-  // --- 5. Call Claude (retry once on parse failure) ---
+  // --- 5. Call Claude (retry once on parse failure, once on timeout) ---
+  const MAX_ATTEMPTS = 2;
+  const isTimeoutError = (err: unknown) =>
+    err instanceof Error &&
+    (err.name === "APIConnectionTimeoutError" || err.message.includes("timed out"));
+
   let parsed: Record<string, unknown>;
   let rawResponse = "";
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let response: Awaited<ReturnType<typeof anthropic.messages.create>>;
     try {
       response = await anthropic.messages.create({
@@ -120,15 +137,15 @@ export async function POST(
         messages: [{ role: "user", content: userMessage }],
       });
     } catch (err) {
-      const isTimeout =
-        err instanceof Error &&
-        (err.name === "APIConnectionTimeoutError" || err.message.includes("timed out"));
       console.error("[analyze] Anthropic error (attempt", attempt, "):", {
         name: err instanceof Error ? err.name : "unknown",
         message: err instanceof Error ? err.message : String(err),
         status: (err as Record<string, unknown>)?.status,
       });
-      if (isTimeout) {
+      if (isTimeoutError(err)) {
+        if (attempt < MAX_ATTEMPTS) {
+          continue; // Retry once on timeout
+        }
         return NextResponse.json(
           { error: "Analysis timed out. Claude is under load — please try again in a moment." },
           { status: 408 }

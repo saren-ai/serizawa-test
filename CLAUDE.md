@@ -188,6 +188,8 @@ Check [Anthropic model deprecation docs](https://docs.anthropic.com/en/docs/reso
 | `UPSTASH_REDIS_REST_URL` | Rate limit + cache | Server only |
 | `UPSTASH_REDIS_REST_TOKEN` | Rate limit + cache | Server only |
 | `CRON_SECRET` | `/api/cron/bulk` | Any strong random string |
+| `ALLOWED_EMAILS` | Middleware | Optional. Comma-separated emails; when set, only these users can access the app (invite-only mode). |
+| `ALLOWED_ANALYZE_EMAIL` | `/api/.../analyze` | Optional. Single email; when set, only this user can run new analyses (owner-only API). Invitees can still view cached/existing results. |
 
 ---
 

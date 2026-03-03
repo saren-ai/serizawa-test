@@ -10,12 +10,19 @@ interface AuthModalProps {
   onClose: () => void;
   /** Message to show above the auth options */
   prompt?: string;
+  /** Redirect path after sign-in (e.g. from invite-only page) */
+  redirectNext?: string;
 }
 
-export function AuthModal({ open, onClose, prompt }: AuthModalProps) {
+export function AuthModal({ open, onClose, prompt, redirectNext }: AuthModalProps) {
   const [loading, setLoading] = useState<"google" | "apple" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
+
+  const callbackUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/auth/callback${redirectNext ? `?next=${encodeURIComponent(redirectNext)}` : ""}`
+      : "/auth/callback";
 
   const handleOAuth = async (provider: "google" | "apple") => {
     setLoading(provider);
@@ -24,8 +31,7 @@ export function AuthModal({ open, onClose, prompt }: AuthModalProps) {
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          // No redirect — stay on current page
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: callbackUrl,
           skipBrowserRedirect: false,
         },
       });

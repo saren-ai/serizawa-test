@@ -1,6 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/** Comma-separated list of allowed emails (invite-only mode). When set, only these users can access the app. */
+function getAllowedEmails(): Set<string> {
+  const raw = process.env.ALLOWED_EMAILS?.trim();
+  if (!raw) return new Set();
+  return new Set(
+    raw.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)
+  );
+}
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -30,16 +39,36 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // --- Invite-only gate: when ALLOWED_EMAILS is set, only listed emails can access the app ---
+  const allowedEmails = getAllowedEmails();
+  const pathname = request.nextUrl.pathname;
+  const isInviteOnlyPath = pathname === "/invite-only" || pathname.startsWith("/auth/");
+  if (allowedEmails.size > 0 && !isInviteOnlyPath) {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/invite-only";
+      url.searchParams.set("next", pathname + request.nextUrl.search);
+      return NextResponse.redirect(url);
+    }
+    const email = user.email?.trim().toLowerCase();
+    if (!email || !allowedEmails.has(email)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/invite-only";
+      url.searchParams.set("reason", "not_invited");
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Protect /admin routes — redirect to home if not authenticated
   // (role check happens inside the admin route itself for granular control)
-  if (request.nextUrl.pathname.startsWith("/admin") && !user) {
+  if (pathname.startsWith("/admin") && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
   // Protect /profile route — redirect to home if not authenticated
-  if (request.nextUrl.pathname.startsWith("/profile") && !user) {
+  if (pathname.startsWith("/profile") && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
